@@ -8,6 +8,8 @@ repository = "https://github.com/wannebetheshy/background_realtime_stt"
 
 languages = ["languages/Stt"]
 
+[context_servers.background-realtime-stt]
+
 [language_servers.background-realtime-stt-server]
 name = "Background Realtime STT Server"
 language = "Stt"
