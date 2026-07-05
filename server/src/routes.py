@@ -1,6 +1,7 @@
 import asyncio
 import difflib
 import json
+import logging
 import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
 from pydantic import BaseModel
@@ -11,6 +12,7 @@ from src.audio import AudioProcessor
 from src.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ModelSelectRequest(BaseModel):
@@ -44,7 +46,7 @@ def _tokenize(s: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", s.lower())
 
 
-def phrase_in_text(phrase: str, text: str, word_threshold: float = 0.8) -> bool:
+def phrase_in_text(phrase: str, text: str, word_threshold: float = 0.5) -> bool:
     """Fuzzy word-sequence match.
 
     Returns True if the phrase's words appear consecutively in the text,
@@ -88,12 +90,24 @@ async def send_phrase_match(
         return False
 
     text = " ".join(s.text for s in segments)
+    found = [phrase_in_text(p, text) for p in phrases]
+
     if not text.strip() and event_type == "partial":
         return True
 
+    logger.info(
+        "transcription %s segment=%s text=%r phrases=%s found=%s",
+        event_type,
+        segment_id,
+        text,
+        phrases,
+        found,
+    )
+
     payload = {
         "type": event_type,
-        "found": [phrase_in_text(p, text) for p in phrases],
+        "text": text,
+        "found": found,
         "segment_id": segment_id,
     }
     if event_type == "final":
@@ -119,6 +133,8 @@ async def websocket_stream(websocket: WebSocket, phrase: list[str] = Query(defau
             json.dumps({"type": "error", "message": "No phrases provided. Pass one or more 'phrase' query parameters."}))
         await websocket.close()
         return
+
+    logger.info("websocket connected phrases=%s", phrases)
 
     await websocket.send_text(json.dumps({"type": "status", "text": "ready", "phrases": phrases}))
 
@@ -178,14 +194,23 @@ async def websocket_stream(websocket: WebSocket, phrase: list[str] = Query(defau
                 )
                 text = " ".join(s.text for s in segments)
                 if text.strip():
+                    found = [phrase_in_text(p, text) for p in phrases]
+                    logger.info(
+                        "transcription final segment=%s text=%r phrases=%s found=%s (disconnect flush)",
+                        segment_id,
+                        text,
+                        phrases,
+                        found,
+                    )
                     await websocket.send_text(json.dumps({
                         "type": "final",
-                        "found": [phrase_in_text(p, text) for p in phrases],
+                        "text": text,
+                        "found": found,
                         "segment_id": segment_id,
                         "is_final": True,
                     }))
             except Exception as e:
-                print(f"Error finalizing transcription: {e}")
+                logger.exception("Error finalizing transcription: %s", e)
 
         if websocket.client_state == WebSocketState.CONNECTED:
             try:

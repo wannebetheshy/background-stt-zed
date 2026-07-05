@@ -25,13 +25,6 @@ stop_voice_server() {
     bash "${SCRIPT_DIR}/stop-server.sh" >>"${LOG}" 2>&1 || true
 }
 
-cleanup() {
-    if [[ -n "${WATCHDOG_PID}" ]]; then
-        kill "${WATCHDOG_PID}" 2>/dev/null || true
-    fi
-    stop_voice_server
-}
-
 watch_supervisor() {
     while kill -0 "${SUPERVISOR_PID}" 2>/dev/null; do
         sleep 1
@@ -39,10 +32,10 @@ watch_supervisor() {
     stop_voice_server
 }
 
-trap cleanup EXIT INT TERM
-
 watch_supervisor &
 WATCHDOG_PID=$!
+
+trap 'kill "${WATCHDOG_PID}" 2>/dev/null || true' EXIT INT TERM
 
 bash "${SCRIPT_DIR}/start-server.sh" >>"${LOG}" 2>&1 &
 python3 -u "${SCRIPT_DIR}/mcp-stub.py"

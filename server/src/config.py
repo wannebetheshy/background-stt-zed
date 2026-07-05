@@ -12,7 +12,7 @@ class Settings(BaseModel):
     port: int = 8764
 
     default_model: Literal["whisper_tiny"] = "whisper_tiny"
-    default_language: str = "auto"
+    default_language: str = "en"
 
     whisper_initial_prompt: str = ""
 

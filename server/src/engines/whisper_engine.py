@@ -36,7 +36,12 @@ class WhisperTinyEngine(STTEngine):
         self._previous_text = ""  # context carryover across segments
 
     def load(self, language: str) -> None:
-        self._language = language
+        from src.config import settings
+
+        if settings.default_language != "auto":
+            self._language = settings.default_language
+        else:
+            self._language = language
         if _cuda_runtime_available():
             self._device = "cuda"
             self._compute_type = "float16"
@@ -82,7 +87,12 @@ class WhisperTinyEngine(STTEngine):
 
         from src.config import settings
 
-        lang_code = None if self._language == "auto" else self._language
+        if settings.default_language != "auto":
+            transcribe_language = settings.default_language
+        elif self._language != "auto":
+            transcribe_language = self._language
+        else:
+            transcribe_language = None
 
         # Build prompt: static domain hint + last segment for cross-segment consistency
         prompt_parts = [settings.whisper_initial_prompt] if settings.whisper_initial_prompt else []
@@ -102,12 +112,20 @@ class WhisperTinyEngine(STTEngine):
 
         segments, info = self.model.transcribe(
             audio,
-            language=lang_code,
+            language=transcribe_language,
             beam_size=beam_size,
             vad_filter=False,  # we handle VAD externally
             without_timestamps=False,
             initial_prompt=prompt or None,
+            multilingual=False,
         )
+
+        if settings.default_language != "auto":
+            resolved_language = settings.default_language
+        elif self._language != "auto":
+            resolved_language = self._language
+        else:
+            resolved_language = info.language
 
         results = []
         for segment in segments:
@@ -118,7 +136,7 @@ class WhisperTinyEngine(STTEngine):
                 start=segment.start,
                 end=segment.end,
                 is_final=is_final,
-                language=info.language,
+                language=resolved_language,
             ))
 
         # Carry the transcribed text forward for next segment's context
@@ -141,5 +159,5 @@ class WhisperTinyEngine(STTEngine):
             name=self.engine_name,
             loaded=self._loaded,
             vram_estimate_mb=self.vram_estimate_mb,
-            supported_languages=["en", "ru", "fr", "de", "es", "zh", "it", "ja", "ko"],  # Not exhaustive
+            supported_languages=["en"],
         )

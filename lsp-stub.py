@@ -3,40 +3,11 @@
 
 from __future__ import annotations
 
-import atexit
 import json
 import os
-import signal
 import subprocess
 import sys
 from typing import Any
-
-_server_stopped = False
-
-
-def stop_server() -> None:
-    global _server_stopped
-    if _server_stopped:
-        return
-    _server_stopped = True
-
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    stop_script = os.path.join(script_dir, "stop-server.sh")
-    subprocess.run(
-        ["bash", stop_script],
-        check=False,
-    )
-
-
-def register_shutdown_handlers() -> None:
-    atexit.register(stop_server)
-
-    def handle_signal(_signum: int, _frame: object | None) -> None:
-        stop_server()
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, handle_signal)
-    signal.signal(signal.SIGINT, handle_signal)
 
 
 def ensure_server_running() -> None:
@@ -87,6 +58,7 @@ def handle_message(message: dict[str, Any]) -> bool:
         return True
 
     if method == "initialize":
+        ensure_server_running()
         write_message(
             {
                 "jsonrpc": "2.0",
@@ -109,18 +81,12 @@ def handle_message(message: dict[str, Any]) -> bool:
 
 
 def main() -> None:
-    register_shutdown_handlers()
-    ensure_server_running()
-
-    try:
-        while True:
-            message = read_message()
-            if message is None:
-                break
-            if not handle_message(message):
-                break
-    finally:
-        stop_server()
+    while True:
+        message = read_message()
+        if message is None:
+            break
+        if not handle_message(message):
+            break
 
 
 if __name__ == "__main__":
