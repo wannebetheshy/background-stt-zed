@@ -9,7 +9,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(use_attribute_docstrings=True, extra="forbid")
 
     host: str = "127.0.0.1"
-    port: int = 8765
+    port: int = 8764
 
     default_model: Literal["whisper_tiny"] = "whisper_tiny"
     default_language: str = "auto"

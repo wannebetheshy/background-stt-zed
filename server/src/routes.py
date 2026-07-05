@@ -2,7 +2,7 @@ import asyncio
 import difflib
 import json
 import re
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
@@ -75,7 +75,7 @@ async def send_phrase_match(
     event_type: str,
     audio,
     segment_id: int,
-    phrase: str,
+    phrases: list[str],
     is_final: bool = False,
 ) -> bool:
     try:
@@ -93,7 +93,7 @@ async def send_phrase_match(
 
     payload = {
         "type": event_type,
-        "found": phrase_in_text(phrase, text),
+        "found": [phrase_in_text(p, text) for p in phrases],
         "segment_id": segment_id,
     }
     if event_type == "final":
@@ -104,7 +104,7 @@ async def send_phrase_match(
 
 
 @router.websocket("/ws/stream")
-async def websocket_stream(websocket: WebSocket, phrase: str = ""):
+async def websocket_stream(websocket: WebSocket, phrase: list[str] = Query(default=[])):
     await websocket.accept()
 
     if model_manager.active_engine is None:
@@ -113,13 +113,14 @@ async def websocket_stream(websocket: WebSocket, phrase: str = ""):
         await websocket.close()
         return
 
-    if not phrase.strip():
+    phrases = [p for p in phrase if p.strip()]
+    if not phrases:
         await websocket.send_text(
-            json.dumps({"type": "error", "message": "No phrase provided. Pass a 'phrase' query parameter."}))
+            json.dumps({"type": "error", "message": "No phrases provided. Pass one or more 'phrase' query parameters."}))
         await websocket.close()
         return
 
-    await websocket.send_text(json.dumps({"type": "status", "text": "ready"}))
+    await websocket.send_text(json.dumps({"type": "status", "text": "ready", "phrases": phrases}))
 
     audio_processor = AudioProcessor(
         sample_rate=settings.audio_sample_rate,
@@ -141,11 +142,11 @@ async def websocket_stream(websocket: WebSocket, phrase: str = ""):
 
                 for event in events:
                     if event.type == "partial_ready":
-                        if not await send_phrase_match(websocket, "partial", event.audio, segment_id, phrase, is_final=False):
+                        if not await send_phrase_match(websocket, "partial", event.audio, segment_id, phrases, is_final=False):
                             transcription_failed = True
                             return
                     elif event.type == "speech_end":
-                        if not await send_phrase_match(websocket, "final", event.audio, segment_id, phrase, is_final=True):
+                        if not await send_phrase_match(websocket, "final", event.audio, segment_id, phrases, is_final=True):
                             transcription_failed = True
                             return
                         segment_id += 1
@@ -155,8 +156,11 @@ async def websocket_stream(websocket: WebSocket, phrase: str = ""):
                     data = json.loads(message["text"])
                     if data.get("command") == "stop":
                         break
-                    elif data.get("command") == "set_phrase" and data.get("phrase", "").strip():
-                        phrase = data["phrase"]
+                    elif data.get("command") == "set_phrases":
+                        new_phrases = [p for p in data.get("phrases", []) if p.strip()]
+                        if new_phrases:
+                            phrases = new_phrases
+                            await websocket.send_text(json.dumps({"type": "status", "text": "phrases_updated", "phrases": phrases}))
                 except json.JSONDecodeError:
                     pass
 
@@ -176,7 +180,7 @@ async def websocket_stream(websocket: WebSocket, phrase: str = ""):
                 if text.strip():
                     await websocket.send_text(json.dumps({
                         "type": "final",
-                        "found": phrase_in_text(phrase, text),
+                        "found": [phrase_in_text(p, text) for p in phrases],
                         "segment_id": segment_id,
                         "is_final": True,
                     }))

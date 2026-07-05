@@ -138,7 +138,7 @@ async def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Terminal Test Client for Background Realtime STT")
     parser.add_argument("--host", default="127.0.0.1", help="Server host")
-    parser.add_argument("--port", default=8765, type=int, help="Server port")
+    parser.add_argument("--port", default=8764, type=int, help="Server port")
     parser.add_argument("--model", type=str, default="whisper_tiny", help="Model to select before streaming")
     parser.add_argument("--language", default="en", help="Language code")
     parser.add_argument("--file", type=str, help="Path to a 16kHz mono WAV file to stream instead of mic")
