@@ -1,0 +1,13 @@
+id = "background-realtime-stt"
+name = "Background Realtime STT"
+description = "Local speech-to-text server for background voice dictation (whisper-tiny)"
+version = "0.0.1"
+schema_version = 1
+authors = ["wannebetheshy"]
+repository = "https://github.com/wannebetheshy/background_realtime_stt"
+
+languages = ["languages/Stt"]
+
+[language_servers.background-realtime-stt-server]
+name = "Background Realtime STT Server"
+language = "Stt"
