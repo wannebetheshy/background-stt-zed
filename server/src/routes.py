@@ -1,5 +1,7 @@
 import asyncio
+import difflib
 import json
+import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
@@ -37,7 +39,45 @@ async def health_check():
     return {"status": "ok"}
 
 
-async def send_transcription(websocket: WebSocket, event_type: str, audio, segment_id: int, is_final: bool = False) -> bool:
+def _tokenize(s: str) -> list[str]:
+    # lowercase, keep only alphanumeric runs -> drops punctuation/casing noise
+    return re.findall(r"[a-z0-9]+", s.lower())
+
+
+def phrase_in_text(phrase: str, text: str, word_threshold: float = 0.8) -> bool:
+    """Fuzzy word-sequence match.
+
+    Returns True if the phrase's words appear consecutively in the text,
+    tolerating punctuation, casing and small transcription errors per word
+    (e.g. "stop zed" matching "Stop, Zed." or "stop zedd").
+    """
+    phrase_tokens = _tokenize(phrase)
+    text_tokens = _tokenize(text)
+
+    if not phrase_tokens:
+        return False
+    if len(text_tokens) < len(phrase_tokens):
+        return False
+
+    n = len(phrase_tokens)
+    for i in range(len(text_tokens) - n + 1):
+        window = text_tokens[i:i + n]
+        if all(
+            difflib.SequenceMatcher(None, pw, tw).ratio() >= word_threshold
+            for pw, tw in zip(phrase_tokens, window)
+        ):
+            return True
+    return False
+
+
+async def send_phrase_match(
+    websocket: WebSocket,
+    event_type: str,
+    audio,
+    segment_id: int,
+    phrase: str,
+    is_final: bool = False,
+) -> bool:
     try:
         segments = await asyncio.to_thread(model_manager.active_engine.transcribe, audio, is_final)
     except Exception as e:
@@ -53,7 +93,7 @@ async def send_transcription(websocket: WebSocket, event_type: str, audio, segme
 
     payload = {
         "type": event_type,
-        "text": text,
+        "found": phrase_in_text(phrase, text),
         "segment_id": segment_id,
     }
     if event_type == "final":
@@ -64,12 +104,18 @@ async def send_transcription(websocket: WebSocket, event_type: str, audio, segme
 
 
 @router.websocket("/ws/stream")
-async def websocket_stream(websocket: WebSocket):
+async def websocket_stream(websocket: WebSocket, phrase: str = ""):
     await websocket.accept()
 
     if model_manager.active_engine is None:
         await websocket.send_text(
             json.dumps({"type": "error", "message": "No model loaded. Please load a model first."}))
+        await websocket.close()
+        return
+
+    if not phrase.strip():
+        await websocket.send_text(
+            json.dumps({"type": "error", "message": "No phrase provided. Pass a 'phrase' query parameter."}))
         await websocket.close()
         return
 
@@ -95,11 +141,11 @@ async def websocket_stream(websocket: WebSocket):
 
                 for event in events:
                     if event.type == "partial_ready":
-                        if not await send_transcription(websocket, "partial", event.audio, segment_id, is_final=False):
+                        if not await send_phrase_match(websocket, "partial", event.audio, segment_id, phrase, is_final=False):
                             transcription_failed = True
                             return
                     elif event.type == "speech_end":
-                        if not await send_transcription(websocket, "final", event.audio, segment_id, is_final=True):
+                        if not await send_phrase_match(websocket, "final", event.audio, segment_id, phrase, is_final=True):
                             transcription_failed = True
                             return
                         segment_id += 1
@@ -109,6 +155,8 @@ async def websocket_stream(websocket: WebSocket):
                     data = json.loads(message["text"])
                     if data.get("command") == "stop":
                         break
+                    elif data.get("command") == "set_phrase" and data.get("phrase", "").strip():
+                        phrase = data["phrase"]
                 except json.JSONDecodeError:
                     pass
 
@@ -128,7 +176,7 @@ async def websocket_stream(websocket: WebSocket):
                 if text.strip():
                     await websocket.send_text(json.dumps({
                         "type": "final",
-                        "text": text,
+                        "found": phrase_in_text(phrase, text),
                         "segment_id": segment_id,
                         "is_final": True,
                     }))
