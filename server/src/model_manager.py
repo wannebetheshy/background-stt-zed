@@ -16,15 +16,20 @@ class ModelManager:
         if model_name not in ENGINE_REGISTRY:
             raise ValueError(f"Unknown model name: {model_name}")
 
-        # If already loaded the exact same model, maybe just update language?
-        # For simplicity, we just reload if model_name differs or we force it.
-        # It's better to always do a clean load for MVP predictability.
+        from src.config import settings
+
+        if language != settings.default_language:
+            print(
+                f"Ignoring requested language {language!r}; "
+                f"background STT is pinned to {settings.default_language!r}."
+            )
+
         self.unload()
 
-        print(f"Loading model {model_name} for language {language}...")
+        print(f"Loading model {model_name} for language {settings.default_language}...")
         engine_cls = ENGINE_REGISTRY[model_name]
         engine = engine_cls()
-        engine.load(language)
+        engine.load(settings.default_language)
         self.active_engine = engine
         print(f"Model {model_name} loaded successfully.")
 

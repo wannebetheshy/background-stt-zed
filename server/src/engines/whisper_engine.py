@@ -26,22 +26,18 @@ class WhisperEngine(STTEngine):
     engine_name = "whisper_turbo"
     model_name = "large-v3-turbo"
     vram_estimate_mb = 6000
+    transcribe_language = "en"
 
     def __init__(self):
         self.model = None
-        self._language = "en"
+        self._language = self.transcribe_language
         self._loaded = False
         self._device = "cpu"
         self._compute_type = "int8"
         self._previous_text = ""  # context carryover across segments
 
-    def load(self, language: str) -> None:
-        from src.config import settings
-
-        if settings.default_language != "auto":
-            self._language = settings.default_language
-        else:
-            self._language = language
+    def load(self, _language: str) -> None:
+        self._language = self.transcribe_language
 
         if _cuda_runtime_available():
             self._device = "cuda"
@@ -88,12 +84,7 @@ class WhisperEngine(STTEngine):
 
         from src.config import settings
 
-        if settings.default_language != "auto":
-            transcribe_language = settings.default_language
-        elif self._language != "auto":
-            transcribe_language = self._language
-        else:
-            transcribe_language = None
+        transcribe_language = self.transcribe_language
 
         # Build prompt: static domain hint + last segment for cross-segment consistency
         prompt_parts = [settings.whisper_initial_prompt] if settings.whisper_initial_prompt else []
@@ -111,7 +102,7 @@ class WhisperEngine(STTEngine):
         # Beam search for finals (accuracy), greedy for partials (low latency)
         beam_size = 5 if is_final else 1
 
-        segments, info = self.model.transcribe(
+        segments, _info = self.model.transcribe(
             audio,
             language=transcribe_language,
             beam_size=beam_size,
@@ -121,12 +112,7 @@ class WhisperEngine(STTEngine):
             multilingual=False,
         )
 
-        if settings.default_language != "auto":
-            resolved_language = settings.default_language
-        elif self._language != "auto":
-            resolved_language = self._language
-        else:
-            resolved_language = info.language
+        resolved_language = self.transcribe_language
 
         results = []
         for segment in segments:

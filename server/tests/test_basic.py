@@ -5,6 +5,7 @@ def test_config_loads():
     assert settings.host == "127.0.0.1"
     assert settings.port == 8764
     assert settings.default_model == "whisper_turbo"
+    assert settings.default_language == "en"
 
 
 def test_whisper_registered():
@@ -25,3 +26,13 @@ def test_config_migrates_legacy_whisper_model(tmp_path):
     )
     settings = Settings.from_yaml(settings_path)
     assert settings.default_model == "whisper_turbo"
+    assert settings.default_language == "en"
+
+
+def test_config_migrates_non_english_language_to_en(tmp_path):
+    from src.config import Settings
+
+    settings_path = tmp_path / "settings.yaml"
+    settings_path.write_text('default_language: "ru"\n', encoding="utf-8")
+    settings = Settings.from_yaml(settings_path)
+    assert settings.default_language == "en"

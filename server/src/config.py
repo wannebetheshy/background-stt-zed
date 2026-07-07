@@ -12,7 +12,7 @@ class Settings(BaseModel):
     port: int = 8764
 
     default_model: Literal["whisper_turbo"] = "whisper_turbo"
-    default_language: str = "en"
+    default_language: Literal["en"] = "en"
 
     whisper_initial_prompt: str = ""
 
@@ -32,6 +32,8 @@ class Settings(BaseModel):
             if yaml_config.get("default_model") == "whisper":
                 yaml_config["default_model"] = "whisper_turbo"
             yaml_config.pop("whisper_model_size", None)
+            if yaml_config.get("default_language") not in (None, "en"):
+                yaml_config["default_language"] = "en"
         return cls.model_validate(yaml_config)
 
 
