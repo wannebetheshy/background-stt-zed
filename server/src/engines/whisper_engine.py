@@ -23,20 +23,12 @@ def _cuda_runtime_available() -> bool:
 
 
 class WhisperEngine(STTEngine):
-    engine_name = "whisper"
-    # Rough resident-memory estimates per faster-whisper model size, used only
-    # for the informational /status endpoint (not enforced anywhere).
-    _VRAM_ESTIMATE_MB = {
-        "tiny": 1000,
-        "base": 1200,
-        "small": 2000,
-        "medium": 5000,
-        "large-v3": 10000,
-    }
+    engine_name = "whisper_turbo"
+    model_name = "large-v3-turbo"
+    vram_estimate_mb = 6000
 
     def __init__(self):
         self.model = None
-        self.model_name = "base"
         self._language = "en"
         self._loaded = False
         self._device = "cpu"
@@ -50,8 +42,6 @@ class WhisperEngine(STTEngine):
             self._language = settings.default_language
         else:
             self._language = language
-
-        self.model_name = settings.whisper_model_size
 
         if _cuda_runtime_available():
             self._device = "cuda"
@@ -169,6 +159,6 @@ class WhisperEngine(STTEngine):
         return EngineInfo(
             name=self.engine_name,
             loaded=self._loaded,
-            vram_estimate_mb=self._VRAM_ESTIMATE_MB.get(self.model_name, 1200),
+            vram_estimate_mb=self.vram_estimate_mb,
             supported_languages=["en"],
         )

@@ -1,8 +1,8 @@
 # background-realtime-stt-server
 
-Local FastAPI + WebSocket real-time STT server, streaming 16kHz mono PCM16 audio through Silero VAD segmentation into a single `whisper` (faster-whisper) engine. Adapted from [ZolotarevAlexandr/realtime_stt](https://github.com/ZolotarevAlexandr/realtime_stt), trimmed to one configurable Whisper engine instead of the turbo/small/qwen3 lineup.
+Local FastAPI + WebSocket real-time STT server, streaming 16kHz mono PCM16 audio through Silero VAD segmentation into a single `whisper_turbo` (faster-whisper large-v3-turbo) engine. Adapted from [ZolotarevAlexandr/realtime_stt](https://github.com/ZolotarevAlexandr/realtime_stt).
 
-Model size is set via `whisper_model_size` in `settings.yaml` (`tiny`/`base`/`small`/`medium`/`large-v3`) — default is `base`; `tiny` turned out too weak in practice.
+Default model is `whisper_turbo` (`large-v3-turbo` via faster-whisper), matching the realtime-stt-zed extension.
 
 ## Run standalone (without Zed)
 
@@ -24,5 +24,5 @@ Creates `.venv`, installs deps from `pyproject.toml`, copies `settings.example.y
 
 - `GET /health` — liveness check.
 - `GET /status` — currently loaded model.
-- `POST /model/select` — `{"model_name": "whisper", "language": "ru"}`.
+- `POST /model/select` — `{"model_name": "whisper_turbo", "language": "ru"}`.
 - `WS /ws/stream` — send raw 16kHz mono PCM16 chunks, receive `{"type": "partial"|"final", "text": ...}` events.

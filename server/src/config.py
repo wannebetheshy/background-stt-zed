@@ -11,12 +11,8 @@ class Settings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8764
 
-    default_model: Literal["whisper"] = "whisper"
+    default_model: Literal["whisper_turbo"] = "whisper_turbo"
     default_language: str = "en"
-
-    # faster-whisper model size: tiny/base/small/medium/large-v3.
-    # tiny was too weak in practice; base is the new default.
-    whisper_model_size: str = "base"
 
     whisper_initial_prompt: str = ""
 
@@ -33,6 +29,9 @@ class Settings(BaseModel):
         with open(path, encoding="utf-8") as f:
             yaml_config: dict = yaml.safe_load(f) or {}
             yaml_config.pop("$schema", None)
+            if yaml_config.get("default_model") == "whisper":
+                yaml_config["default_model"] = "whisper_turbo"
+            yaml_config.pop("whisper_model_size", None)
         return cls.model_validate(yaml_config)
 
 
